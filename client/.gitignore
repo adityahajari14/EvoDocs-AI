@@ -36,6 +36,7 @@ coverage/
 build/
 out/
 .next/
+.vite/
 
 # Dependency lock files
 package-lock.json

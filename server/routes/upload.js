@@ -12,9 +12,11 @@ router.post('/upload', upload.array('files', 5), async (req, res) => {
   try {
     console.log('Received files:', req.files?.length);
     console.log('Received prompt:', req.body.prompt);
+    console.log('Want summary:', req.body.wantSummary);
 
     const files = req.files;
     const userPrompt = req.body.prompt;
+    const wantSummary = req.body.wantSummary === 'true';
     
     if (!files || files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
@@ -25,7 +27,7 @@ router.post('/upload', upload.array('files', 5), async (req, res) => {
     for (const file of files) {
       console.log('Processing file:', file.originalname);
       
-      const summary = new Summary({
+      const summary = new Chat({
         originalName: file.originalname,
         userPrompt,
         messages: [{
@@ -34,12 +36,12 @@ router.post('/upload', upload.array('files', 5), async (req, res) => {
         }]
       });
 
-     
-      const pythonResult = await new Promise((resolve, reject) => {
+      // First run gemini.py
+      const geminiResult = await new Promise((resolve, reject) => {
         const tempFileName = `temp_${Date.now()}${path.extname(file.originalname)}`;
         
         const pythonProcess = spawn('python', [
-          path.join(__dirname, '../../llm-server/summarizer.py'),
+          path.join(__dirname, '../../llm-server/gemini.py'),
           tempFileName,
           userPrompt || ''
         ]);
@@ -74,20 +76,98 @@ router.post('/upload', upload.array('files', 5), async (req, res) => {
           }
           
           try {
-            const result = JSON.parse(pythonOutput);
+            // Ensure we have valid JSON output
+            const cleanOutput = pythonOutput.trim().replace(/\0/g, '');
+            const result = JSON.parse(cleanOutput);
+            
             if (!result.success) {
               reject(new Error(result.error || 'Processing failed'));
               return;
             }
 
-            summary.extractedText = result.extractedText;
-            summary.summary = result.summary;
-            summary.messages.push({
-              role: 'assistant',
-              content: result.summary
+            // Update the Drive upload process to use the new handler
+            const driveUploadProcess = spawn('python', [
+              path.join(__dirname, '../../llm-server/utils/drive_handler.py')
+            ]);
+
+            driveUploadProcess.stdin.write(JSON.stringify({
+              fileName: file.originalname,
+              fileContent: file.buffer.toString('base64'),
+              folderName: result.category
+            }));
+            driveUploadProcess.stdin.end();
+
+            let driveResponse = '';
+            driveUploadProcess.stdout.on('data', (data) => {
+              driveResponse += data.toString();
             });
-            await summary.save();
-            resolve(result);
+
+            driveUploadProcess.on('close', async (uploadCode) => {
+              if (uploadCode === 0) {
+                const driveResult = JSON.parse(driveResponse);
+                if (driveResult.success) {
+                  result.driveFileId = driveResult.fileId;
+                  result.driveFolderId = driveResult.folderId;
+                }
+              }
+
+              // Continue with existing logic for summary and saving
+              if (!wantSummary) {
+                summary.extractedText = result.extractedText;
+                summary.summary = result.summary;
+                summary.driveFileId = result.driveFileId;
+                summary.driveFolderId = result.driveFolderId;
+                summary.category = result.category;
+                summary.messages.push({
+                  role: 'assistant',
+                  content: result.summary
+                });
+                await summary.save();
+                resolve(result);
+              } else {
+                // If summary is requested, run the summary script
+                const summaryProcess = spawn('python', [
+                  path.join(__dirname, '../../llm-server/summary.py'),
+                  userPrompt || ''
+                ]);
+
+                let summaryOutput = '';
+                summaryProcess.stdin.write(result.summary);
+                summaryProcess.stdin.end();
+
+                summaryProcess.stdout.on('data', (data) => {
+                  summaryOutput += data.toString();
+                });
+
+                summaryProcess.on('close', async (summaryCode) => {
+                  if (summaryCode !== 0) {
+                    reject(new Error('Summary generation failed'));
+                    return;
+                  }
+
+                  const summaryResult = JSON.parse(summaryOutput);
+                  if (!summaryResult.success) {
+                    reject(new Error(summaryResult.error || 'Summary generation failed'));
+                    return;
+                  }
+
+                  summary.extractedText = result.extractedText;
+                  summary.summary = summaryResult.summary;
+                  summary.messages.push({
+                    role: 'assistant',
+                    content: result.summary
+                  }, {
+                    role: 'assistant',
+                    content: summaryResult.summary
+                  });
+                  await summary.save();
+                  resolve({
+                    ...result,
+                    summary: summaryResult.summary
+                  });
+                });
+              }
+            });
           } catch (error) {
             console.error('Parse error:', error, 'Output:', pythonOutput);
             reject(new Error('Failed to parse Python output'));
@@ -95,6 +175,7 @@ router.post('/upload', upload.array('files', 5), async (req, res) => {
         });
 
         try {
+          // Write file buffer directly without encoding
           pythonProcess.stdin.write(file.buffer);
           pythonProcess.stdin.end();
         } catch (error) {
@@ -103,7 +184,7 @@ router.post('/upload', upload.array('files', 5), async (req, res) => {
         }
       });
 
-      processResults.push(pythonResult);
+      processResults.push(geminiResult);
     }
 
     res.json({ 

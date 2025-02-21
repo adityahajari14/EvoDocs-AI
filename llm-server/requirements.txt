@@ -44,3 +44,6 @@ uritemplate
 urllib3
 virtualenv
 websockets
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client

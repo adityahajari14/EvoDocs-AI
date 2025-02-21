@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import LoadingSpinner from './LoadingSpinner'
-import { FiUpload, FiSend, FiDownload, FiX, FiFile } from 'react-icons/fi';
+import { FiUpload, FiSend, FiDownload, FiX, FiFile, FiFolder } from 'react-icons/fi';
+import { exportToPDF, exportToDocx, exportToTXT } from '../../utils/exportUtils'
 import "./chat.css"
 
 const Chat = () => {
@@ -186,6 +187,18 @@ const Chat = () => {
                     <span className="file-name">{conv.originalName}</span>
                     <span className="chat-date">{new Date(conv.createdAt).toLocaleString()}</span>
                   </div>
+                  {conv.driveFolderUrl && (
+                    <div className="chat-drive-links">
+                      <a href={conv.driveFolderUrl} target="_blank" rel="noopener noreferrer">
+                        <FiFolder /> View in Drive
+                      </a>
+                      {conv.driveFileUrl && (
+                        <a href={conv.driveFileUrl} target="_blank" rel="noopener noreferrer">
+                          <FiFile /> View File
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="chat-messages">
                   {conv.messages.map((msg, msgIndex) => (
