@@ -12,6 +12,11 @@ const chatSchema = new mongoose.Schema({
   extractedText: String,
   summary: String,
   messages: [messageSchema],
+  driveFileId: String,
+  driveFolderId: String,
+  driveFileUrl: String,
+  driveFolderUrl: String,
+  category: String,
   createdAt: { type: Date, default: Date.now }
 });
 
