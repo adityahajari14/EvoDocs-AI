@@ -7,6 +7,7 @@ import "./chat.css"
 const Chat = () => {
   const [files, setFiles] = useState([]);
   const [prompt, setPrompt] = useState('');
+  const [wantSummary, setWantSummary] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -44,8 +45,13 @@ const Chat = () => {
   };
 
   const handleSubmit = async () => {
-    if (files.length === 0 && !prompt) {
-      alert('Please provide a prompt or upload files');
+    if (files.length === 0) {
+      alert('Please upload files');
+      return;
+    }
+
+    if (wantSummary && !prompt) {
+      alert('Please provide instructions for summarization');
       return;
     }
 
@@ -54,6 +60,7 @@ const Chat = () => {
     files.forEach(file => {
       formData.append('files', file);
     });
+    formData.append('wantSummary', wantSummary);
     formData.append('prompt', prompt || '');
 
     try {
@@ -129,13 +136,6 @@ const Chat = () => {
         )}
 
         <div className="chat-inputContainer">
-          <input 
-            type="text" 
-            className="chat-input" 
-            placeholder="Instructions for summarization..." 
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
           <div className="chat-buttons">
             <input
               type="file"
@@ -153,8 +153,84 @@ const Chat = () => {
               <FiSend />
               <span>{isLoading ? 'Processing...' : 'Submit'}</span>
             </button>
+            <button
+              className={`chat-summary-toggle ${wantSummary ? 'active' : ''}`}
+              onClick={() => {
+                setWantSummary(!wantSummary);
+                if (wantSummary) setPrompt('');
+              }}
+            >
+              <span>Summarize {wantSummary ? '✓' : '?'}</span>
+            </button>
           </div>
+
+          {wantSummary && (
+            <input 
+              type="text" 
+              className="chat-input" 
+              placeholder="Instructions for summarization..." 
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+          )}
         </div>
+
+        {isLoading ? (
+          <LoadingSpinner />
+        ) : (
+          <div className="chat-conversations">
+            {conversations.map((conv, index) => (
+              <div key={index} className="chat-conversation">
+                <div className="chat-conversation-header">
+                  <div className="chat-conversation-title">
+                    <span className="file-name">{conv.originalName}</span>
+                    <span className="chat-date">{new Date(conv.createdAt).toLocaleString()}</span>
+                  </div>
+                </div>
+                <div className="chat-messages">
+                  {conv.messages.map((msg, msgIndex) => (
+                    <div 
+                      key={msgIndex} 
+                      className={`chat-message ${msg.role === 'user' ? 'user' : 'assistant'}`}
+                    >
+                      {msg.role === 'user' ? (
+                        <p>{msg.content}</p>
+                      ) : (
+                        <>
+                          <ReactMarkdown 
+                            className="markdown-content"
+                            components={{
+                              p: ({node, ...props}) => <p className="message-paragraph" {...props} />,
+                              ul: ({node, ...props}) => <ul className="message-list" {...props} />,
+                              li: ({node, ...props}) => <li className="message-list-item" {...props} />,
+                              blockquote: ({node, ...props}) => <blockquote className="message-quote" {...props} />
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                          <div className="export-buttons">
+                            <button onClick={() => handleExport(msg.content, 'pdf')}>
+                              <FiDownload /> PDF
+                            </button>
+                            <button onClick={() => handleExport(msg.content, 'docx')}>
+                              <FiDownload /> DOCX
+                            </button>
+                            <button onClick={() => handleExport(msg.content, 'txt')}>
+                              <FiDownload /> TXT
+                            </button>
+                          </div>
+                        </>
+                      )}
+                      <span className="message-time">
+                        {new Date(msg.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   )
