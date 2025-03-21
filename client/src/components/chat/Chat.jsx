@@ -51,11 +51,6 @@ const Chat = () => {
       return;
     }
 
-    if (wantSummary && !prompt) {
-      alert('Please provide instructions for summarization');
-      return;
-    }
-
     setIsLoading(true);
     const formData = new FormData();
     files.forEach(file => {

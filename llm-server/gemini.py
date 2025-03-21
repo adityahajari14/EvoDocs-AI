@@ -30,17 +30,19 @@ def process_file(file_name, file_content, user_prompt):
 
         prompt_text = """
         Analyze this document and classify it into EXACTLY ONE of these categories:
-        1. HR_Documents
+        1. HR Documents
         2. Administrative
-        3. Financial_Records
-        4. Legal_Documents
-        5. Sales_Marketing
-        6. Technical_Docs
+        3. Financial Records
+        4. Legal Documents
+        5. Sales & Marketing
+        6. Technical
         7. Miscellaneous
 
-        Return your response in this format exactly:
+        You must respond in exactly this format:
         Folder: <category_name>
-        Summary: <your detailed analysis>
+        Summary(If user has selected): <your detailed analysis>
+
+        Do not include any other text or formatting.
         
         Document content (Base64 encoded):
         """
@@ -53,21 +55,31 @@ def process_file(file_name, file_content, user_prompt):
         
         try:
             response_text = response.text
-            # Parse the formatted response
-            lines = response_text.strip().split('\n')
-            folder = lines[0].replace('Folder:', '').strip()
-            summary = '\n'.join(lines[1:]).replace('Summary:', '', 1).strip()
+            # Extract folder and summary using string manipulation
+            if "Folder:" in response_text:
+                parts = response_text.split("Summary(If user has selected):", 1)
+                folder = parts[0].replace("Folder:", "").strip()
+                summary = parts[1].strip() if len(parts) > 1 else ""
+            else:
+                folder = "Miscellaneous"
+                summary = response_text.strip()
+            
+            # Only include the folder in formatted_output with proper line breaks
+            formatted_output = f"Folder: {folder}\n"  # Note the \n at the end
             
             return {
                 "success": True,
                 "category": folder,
-                "summary": summary
+                "summary": summary,
+                "formatted_output": formatted_output
             }
-        except Exception:
+        except Exception as e:
+            print(f"Error parsing response: {str(e)}", file=sys.stderr)
             return {
                 "success": True,
                 "category": "Miscellaneous",
-                "summary": response_text
+                "summary": response_text,
+                "formatted_output": "Folder: Miscellaneous"
             }
 
     except Exception as e:

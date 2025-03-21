@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
-def generate_summary(text, prompt):
+def generate_summary(text, prompt=None):
     try:
         if "GEMINI_API_KEY" not in os.environ:
             raise ValueError("GEMINI_API_KEY not found in environment variables")
@@ -25,9 +25,21 @@ def generate_summary(text, prompt):
             generation_config=generation_config
         )
 
-        prompt_text = f"Please provide a concise summary of the following analysis. Focus on the key points and main takeaways: {text}"
-        if prompt:
-            prompt_text += f"\nAdditional instructions: {prompt}"
+        # Base system prompt for summarization
+        system_prompt = """
+        As an analytical assistant, summarize the provided content by:
+        - Identifying key information and main points
+        - Using clear, professional language
+        - Organizing information logically
+        - Including relevant technical details
+        - Maintaining objectivity
+        """
+
+        # Combine prompts based on what's available
+        if prompt and prompt.strip():
+            prompt_text = f"{system_prompt}\n\nUser Instructions: {prompt}\nContent to analyze: {text}"
+        else:
+            prompt_text = f"{system_prompt}\n\nContent to analyze: {text}"
 
         response = model.generate_content(prompt_text)
         
@@ -45,7 +57,7 @@ def generate_summary(text, prompt):
 def main():
     try:
         input_text = sys.stdin.read()
-        prompt = sys.argv[1] if len(sys.argv) > 1 else ""
+        prompt = sys.argv[1] if len(sys.argv) > 1 else None
         
         result = generate_summary(input_text, prompt)
         print(json.dumps(result))
